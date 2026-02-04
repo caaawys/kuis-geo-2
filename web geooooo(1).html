@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Web Quiz Interaktif</title>
+<style>
+:root{
+  --primary:#4f46e5;--success:#22c55e;--danger:#ef4444;
+  --bg:#f5f7fb;--card:#ffffff;
+}
+*{box-sizing:border-box;font-family:'Segoe UI',sans-serif}
+body{margin:0;background:var(--bg)}
+header{background:linear-gradient(135deg,var(--primary),#6366f1);color:#fff;padding:16px;text-align:center;font-size:22px;font-weight:700}
+.container{max-width:900px;margin:20px auto;padding:16px}
+.card{background:var(--card);border-radius:16px;padding:20px;box-shadow:0 10px 25px rgba(0,0,0,.08);margin-bottom:20px}
+button{cursor:pointer;border:none;border-radius:10px;padding:12px 16px;font-size:15px;font-weight:600}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-success{background:var(--success);color:#fff}
+.btn-danger{background:var(--danger);color:#fff}
+input,textarea{width:100%;padding:10px;margin:6px 0;border-radius:8px;border:1px solid #e5e7eb}
+.options button{width:100%;margin:6px 0;border:2px solid #e5e7eb;background:#fff}
+.options button:hover{border-color:var(--primary);background:#eef2ff}
+.correct{background:#dcfce7;border-color:var(--success)}
+.wrong{background:#fee2e2;border-color:var(--danger)}
+img.soal{max-width:100%;border-radius:12px;margin:10px 0}
+.timer{font-weight:700;color:var(--danger);text-align:right}
+table{width:100%;border-collapse:collapse}
+th,td{padding:10px;border-bottom:1px solid #e5e7eb}
+th{background:#eef2ff}
+.hidden{display:none}
+footer{text-align:center;font-size:13px;color:#6b7280;margin:20px 0}
+</style>
+</head>
+<body>
+<header>🎯 Web Quiz Interaktif</header>
+<div class="container">
+
+<div class="card" id="modeSelect">
+<h3>Pilih Mode</h3>
+<button class="btn-primary" onclick="showGuru()">👨‍🏫 Mode Guru</button>
+<button class="btn-success" onclick="showPeserta()">🧑‍🎓 Mode Peserta</button>
+</div>
+
+<!-- MODE GURU -->
+<div class="card hidden" id="guruMode">
+<h3>👨‍🏫 Kelola Soal</h3>
+<input id="qText" placeholder="Teks soal">
+<input type="file" id="qImage" accept="image/*">
+<input id="optA" placeholder="Opsi A">
+<input id="optB" placeholder="Opsi B">
+<input id="optC" placeholder="Opsi C">
+<input id="optD" placeholder="Opsi D">
+<select id="qAnswer">
+<option value="A">Jawaban Benar A</option>
+<option value="B">Jawaban Benar B</option>
+<option value="C">Jawaban Benar C</option>
+<option value="D">Jawaban Benar D</option>
+</select>
+<button class="btn-primary" onclick="addQuestion()">➕ Simpan Soal</button>
+<hr>
+<h4>Daftar Soal</h4>
+<div id="questionList"></div>
+<hr>
+<h4>📊 Rekap Nilai</h4>
+<table><tr><th>Nama</th><th>Skor</th></tr><tbody id="scoreTable"></tbody></table>
+<button class="btn-danger" onclick="backHome()">⬅️ Kembali</button>
+</div>
+
+<!-- MODE PESERTA -->
+<div class="card hidden" id="pesertaMode">
+<h3>🧑‍🎓 Mulai Quiz</h3>
+<input id="playerName" placeholder="Nama Peserta">
+<button class="btn-success" onclick="startQuiz()">▶️ Mulai</button>
+<div id="quizBox" class="hidden">
+<div class="timer" id="timer"></div>
+<div id="question"></div>
+<img id="quizImage" class="soal">
+<div class="options" id="options"></div>
+</div>
+<button class="btn-danger" onclick="backHome()">⬅️ Kembali</button>
+</div>
+
+</div>
+<footer>© 2026 Web Quiz Sekolah</footer>
+
+<audio id="soundCorrect" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"></audio>
+<audio id="soundWrong" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg"></audio>
+
+<script>
+let questions = JSON.parse(localStorage.getItem('questions')||'[]');
+let scores = JSON.parse(localStorage.getItem('scores')||'[]');
+let current=0,score=0,time=15,timer;
+let quizQuestions=[],player='';
+
+function showGuru(){modeSelect.classList.add('hidden');guruMode.classList.remove('hidden');renderQuestions();renderScores();}
+function showPeserta(){modeSelect.classList.add('hidden');pesertaMode.classList.remove('hidden');}
+function backHome(){location.reload();}
+
+let editIndex = -1;
+function addQuestion(){
+  const save = (imgData)=>{
+    const data = {
+      text:qText.value,
+      img:imgData||'',
+      options:[optA.value,optB.value,optC.value,optD.value],
+      answer:qAnswer.value
+    };
+    if(editIndex>-1){
+      questions[editIndex]=data;
+      editIndex=-1;
+    } else {
+      questions.push(data);
+    }
+    localStorage.setItem('questions',JSON.stringify(questions));
+    clearForm();
+    renderQuestions();
+  };
+  const file=qImage.files[0];
+  if(file){
+    const reader=new FileReader();
+    reader.onload=()=>save(reader.result);
+    reader.readAsDataURL(file);
+  } else {
+    save(editIndex>-1?questions[editIndex].img:'');
+  }
+}
+function clearForm(){qText.value='';optA.value='';optB.value='';optC.value='';optD.value='';qImage.value='';}
+
+function renderQuestions(){
+  questionList.innerHTML='';
+  questions.forEach((q,i)=>{
+    const div=document.createElement('div');
+    div.innerHTML=`${i+1}. ${q.text}
+      <button onclick=\"editQ(${i})\">✏️</button>
+      <button onclick=\"delQ(${i})\">🗑️</button>`;
+    questionList.appendChild(div);
+  });
+}
+function editQ(i){
+  const q=questions[i];
+  editIndex=i;
+  qText.value=q.text;
+  optA.value=q.options[0];
+  optB.value=q.options[1];
+  optC.value=q.options[2];
+  optD.value=q.options[3];
+  qAnswer.value=q.answer;
+}
+function delQ(i){questions.splice(i,1);localStorage.setItem('questions',JSON.stringify(questions));renderQuestions();}
+
+function startQuiz(){
+  player=playerName.value;
+  quizQuestions=[...questions].sort(()=>Math.random()-0.5);
+  current=0;score=0;
+  quizBox.classList.remove('hidden');
+  loadQuestion();
+}
+
+function loadQuestion(){
+  clearInterval(timer);
+  if(current>=quizQuestions.length){function finishQuiz(){
+  scores.push({name:player,score});
+  localStorage.setItem('scores',JSON.stringify(scores));
+  alert('Quiz selesai! Skor kamu: '+score);
+  renderScores();
+  backHome();
+}
+  const q=quizQuestions[current];
+  question.innerHTML=q.text;
+  quizImage.style.display=q.img?'block':'none';
+  if(q.img) quizImage.src=q.img;
+  options.innerHTML='';
+  shuffle(q.options).forEach((o,i)=>{
+    const b=document.createElement('button');
+    b.textContent=o;
+    b.onclick=()=>checkAnswer(i,b,q.answer);
+    options.appendChild(b);
+  });
+  time=15;timerEl();
+  timer=setInterval(()=>{time--;timerEl();if(time<=0)next();},1000);
+}
+function timerEl(){timer.innerHTML='⏱️ '+time+' | Skor: '+score}
+function checkAnswer(i,btn,ans){
+  clearInterval(timer);
+  const correctIndex = {A:0,B:1,C:2,D:3}[ans];
+  if(i===correctIndex){btn.classList.add('correct');score+=time*10;soundCorrect.play();}
+  else{btn.classList.add('wrong');soundWrong.play();}
+  setTimeout(next,1000);
+}
+function next(){current++;loadQuestion();}
+function finishQuiz(){scores.push({name:player,score});localStorage.setItem('scores',JSON.stringify(scores));alert('Quiz selesai! Skor: '+score);backHome();}
+function shuffle(a){return a.sort(()=>Math.random()-0.5)}
+function renderScores(){
+  scoreTable.innerHTML='';
+  const ranked = [...scores].sort((a,b)=>b.score-a.score);
+  ranked.forEach((s,i)=>{
+    scoreTable.innerHTML += `<tr><td>${i+1}. ${s.name}</td><td>${s.score}</td></tr>`;
+  });
+}
+</script>
+</body>
+</html>
